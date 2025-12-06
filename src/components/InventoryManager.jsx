@@ -1,15 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Package, Plus, Edit2, Trash2, AlertTriangle, 
-    TrendingUp, TrendingDown, Calendar, BarChart3, 
-    Filter, FileText, RefreshCw, Search
+    TrendingUp, TrendingDown, BarChart3, 
+    Filter, FileText, RefreshCw, Search,
+    ArrowUpCircle, ArrowDownCircle, 
+    CheckCircle, XCircle, ShoppingCart
 } from 'lucide-react';
 import { Button, Card, Input, Modal } from '../UI';
 import InventoryReport from './InventoryReport';
 import { 
     INVENTORY_CATEGORIES, 
-    FEED_TYPES_DETAILED, 
-    generateInventoryAlerts 
+    FEED_TYPES, 
+    generateInventoryAlerts,
+    calculateInventoryStats,
+    formatCurrency,
+    formatNumber
 } from '../utils/helpers';
 
 const InventoryManager = ({ 
@@ -40,55 +45,32 @@ const InventoryManager = ({
     });
     const [editingItem, setEditingItem] = useState(null);
     const [consumptionModal, setConsumptionModal] = useState(false);
-    const [selectedItemForConsumption, setSelectedItemForConsumption] = useState(null);
+    const [restockModal, setRestockModal] = useState(false);
+    const [selectedItem, setSelectedItem] = useState(null);
     const [consumptionAmount, setConsumptionAmount] = useState('');
+    const [restockAmount, setRestockAmount] = useState('');
     const [showReport, setShowReport] = useState(false);
-    const [stockHistory, setStockHistory] = useState([]);
 
-    // تحليل استهلاك العلف
-    const feedConsumptionAnalysis = activeBatch ? (() => {
-        const batchLogs = dailyLogs.filter(l => l.batchId === activeBatch.id);
-        const feedByType = {};
-        let totalFeed = 0;
-        
-        batchLogs.forEach(log => {
-            if (log.feed && log.feedType) {
-                totalFeed += Number(log.feed);
-                if (!feedByType[log.feedType]) {
-                    feedByType[log.feedType] = 0;
-                }
-                feedByType[log.feedType] += Number(log.feed);
-            }
-        });
-        
-        return { totalFeed, feedByType };
-    })() : { totalFeed: 0, feedByType: {} };
-
-    // حساب إجمالي قيمة المخزون
-    const totalInventoryValue = inventoryItems.reduce((total, item) => {
-        return total + (Number(item.currentStock) * Number(item.costPerUnit || 0));
-    }, 0);
-
+    // إحصائيات المخزون
+    const inventoryStats = calculateInventoryStats(inventoryItems);
+    
     // تحذيرات المخزون
     const inventoryAlerts = generateInventoryAlerts(inventoryItems);
 
-    // فلترة العناصر مع البحث
+    // فلترة العناصر
     const filteredItems = inventoryItems
         .filter(item => {
-            // البحث حسب الاسم
             if (searchQuery && !item.name.toLowerCase().includes(searchQuery.toLowerCase())) {
                 return false;
             }
             
-            // الفلترة حسب النوع
             if (filter === 'all') return true;
             if (filter === 'low') return item.currentStock <= item.minStock;
             if (filter === 'feed') return item.category === 'أعلاف';
             if (filter === 'medicine') return item.category === 'أدوية وتحصينات';
             if (filter === 'expired') {
                 if (!item.expiryDate) return false;
-                const expiryDate = new Date(item.expiryDate);
-                return expiryDate < new Date();
+                return new Date(item.expiryDate) < new Date();
             }
             return item.category === filter;
         })
@@ -103,62 +85,53 @@ const InventoryManager = ({
             }
         });
 
-    // التحليل الإحصائي
-    const inventoryStats = {
-        totalItems: inventoryItems.length,
-        lowStockItems: inventoryItems.filter(item => item.currentStock <= item.minStock).length,
-        feedItems: inventoryItems.filter(item => item.category === 'أعلاف').length,
-        medicineItems: inventoryItems.filter(item => item.category === 'أدوية وتحصينات').length,
-        expiredItems: inventoryItems.filter(item => {
-            if (!item.expiryDate) return false;
-            return new Date(item.expiryDate) < new Date();
-        }).length
-    };
+    // إضافة مخزون العلف التلقائي
+    useEffect(() => {
+        if (inventoryItems.length === 0) {
+            const hasFeed = inventoryItems.some(item => item.category === 'أعلاف');
+            if (!hasFeed) {
+                const initialFeed = FEED_TYPES.map(feed => ({
+                    id: Date.now() + Math.random(),
+                    name: feed.name,
+                    category: 'أعلاف',
+                    unit: 'كجم',
+                    currentStock: 1000,
+                    minStock: 200,
+                    costPerUnit: feed.pricePerKg,
+                    supplier: 'شركة الأعلاف الوطنية',
+                    notes: `علف ${feed.name} - بروتين ${feed.protein}%`,
+                    code: feed.code,
+                    isFeed: true
+                }));
+                setInventoryItems(initialFeed);
+                showNotify("Initial feed inventory created");
+            }
+        }
+    }, []);
 
     const saveItem = () => {
-        if (!newItem.name || !newItem.currentStock) {
-            return showNotify("البيانات الأساسية مطلوبة");
+        if (!newItem.name) {
+            return showNotify("Item name is required");
         }
 
         const itemToSave = {
             ...newItem,
             id: editingItem ? editingItem.id : Date.now(),
             batchId: activeBatch?.id || null,
-            lastUpdated: new Date().toISOString().split('T')[0]
+            lastUpdated: new Date().toISOString().split('T')[0],
+            currentStock: Number(newItem.currentStock) || 0,
+            minStock: Number(newItem.minStock) || 0,
+            costPerUnit: Number(newItem.costPerUnit) || 0
         };
 
         if (editingItem) {
-            // حفظ تاريخ التعديل
-            const historyEntry = {
-                date: new Date().toISOString(),
-                itemId: editingItem.id,
-                action: 'تعديل',
-                previousStock: editingItem.currentStock,
-                newStock: newItem.currentStock,
-                notes: `تعديل بواسطة المستخدم`
-            };
-            setStockHistory(prev => [historyEntry, ...prev]);
-
-            // تحديث العنصر
             setInventoryItems(prev => 
                 prev.map(item => item.id === editingItem.id ? itemToSave : item)
             );
-            showNotify("تم تحديث العنصر ✅");
+            showNotify("Item updated ✅");
         } else {
-            // تاريخ إضافة جديد
-            const historyEntry = {
-                date: new Date().toISOString(),
-                itemId: itemToSave.id,
-                action: 'إضافة',
-                previousStock: 0,
-                newStock: newItem.currentStock,
-                notes: `إضافة جديدة`
-            };
-            setStockHistory(prev => [historyEntry, ...prev]);
-
-            // إضافة عنصر جديد
             setInventoryItems(prev => [...prev, itemToSave]);
-            showNotify("تم إضافة العنصر ✅");
+            showNotify("Item added ✅");
         }
 
         resetForm();
@@ -182,73 +155,70 @@ const InventoryManager = ({
         setView('new');
     };
 
+    // استهلاك المخزون (طرح)
     const handleConsumption = (item) => {
-        setSelectedItemForConsumption(item);
+        setSelectedItem(item);
         setConsumptionAmount('');
         setConsumptionModal(true);
     };
 
     const saveConsumption = () => {
-        if (!consumptionAmount || consumptionAmount <= 0) {
-            return showNotify("الرجاء إدخال كمية صحيحة");
+        if (!consumptionAmount || isNaN(consumptionAmount) || consumptionAmount <= 0) {
+            return showNotify("Please enter a valid quantity");
         }
 
         const amount = Number(consumptionAmount);
-        const item = selectedItemForConsumption;
+        const item = selectedItem;
 
         if (amount > item.currentStock) {
-            return showNotify("الكمية المطلوبة أكبر من المخزون المتاح");
+            return showNotify(`Insufficient stock. Available: ${item.currentStock} ${item.unit}`);
         }
 
-        // تحديث المخزون
+        // الطرح من المخزون
         const updatedItems = inventoryItems.map(invItem => 
             invItem.id === item.id ? 
-            { ...invItem, currentStock: invItem.currentStock - amount } : 
+            { 
+                ...invItem, 
+                currentStock: invItem.currentStock - amount // الطرح
+            } : 
             invItem
         );
+        
         setInventoryItems(updatedItems);
-
-        // تسجيل في التاريخ
-        const historyEntry = {
-            date: new Date().toISOString(),
-            itemId: item.id,
-            action: 'استهلاك',
-            previousStock: item.currentStock,
-            newStock: item.currentStock - amount,
-            notes: `استهلاك: ${amount} ${item.unit} للدورة ${activeBatch?.name || 'عام'}`
-        };
-        setStockHistory(prev => [historyEntry, ...prev]);
-
-        showNotify(`تم خصم ${amount} ${item.unit} من ${item.name}`);
+        showNotify(`✓ Consumed ${amount} ${item.unit} of ${item.name}`);
         setConsumptionModal(false);
-        setSelectedItemForConsumption(null);
+        setSelectedItem(null);
     };
 
+    // إضافة مخزون (جمع)
     const handleRestock = (item) => {
-        const restockAmount = prompt(`كمية الإضافة لـ ${item.name} (${item.unit}):`, item.minStock * 2);
-        
-        if (restockAmount && !isNaN(restockAmount) && restockAmount > 0) {
-            const amount = Number(restockAmount);
-            const updatedItems = inventoryItems.map(invItem => 
-                invItem.id === item.id ? 
-                { ...invItem, currentStock: invItem.currentStock + amount } : 
-                invItem
-            );
-            setInventoryItems(updatedItems);
+        setSelectedItem(item);
+        setRestockAmount('');
+        setRestockModal(true);
+    };
 
-            // تسجيل في التاريخ
-            const historyEntry = {
-                date: new Date().toISOString(),
-                itemId: item.id,
-                action: 'تزويد',
-                previousStock: item.currentStock,
-                newStock: item.currentStock + amount,
-                notes: `تزويد بالمخزون`
-            };
-            setStockHistory(prev => [historyEntry, ...prev]);
-
-            showNotify(`تم إضافة ${amount} ${item.unit} إلى ${item.name}`);
+    const saveRestock = () => {
+        if (!restockAmount || isNaN(restockAmount) || restockAmount <= 0) {
+            return showNotify("Please enter a valid quantity");
         }
+
+        const amount = Number(restockAmount);
+        const item = selectedItem;
+
+        // الجمع إلى المخزون
+        const updatedItems = inventoryItems.map(invItem => 
+            invItem.id === item.id ? 
+            { 
+                ...invItem, 
+                currentStock: invItem.currentStock + amount // الجمع
+            } : 
+            invItem
+        );
+        
+        setInventoryItems(updatedItems);
+        showNotify(`✓ Added ${amount} ${item.unit} to ${item.name}`);
+        setRestockModal(false);
+        setSelectedItem(null);
     };
 
     const resetForm = () => {
@@ -267,13 +237,32 @@ const InventoryManager = ({
         setEditingItem(null);
     };
 
+    // تحليل استهلاك العلف
+    const feedConsumptionAnalysis = activeBatch ? (() => {
+        const batchLogs = dailyLogs.filter(l => l.batchId === activeBatch.id);
+        const feedByType = {};
+        let totalFeed = 0;
+        
+        batchLogs.forEach(log => {
+            if (log.feed && log.feedType) {
+                totalFeed += Number(log.feed);
+                if (!feedByType[log.feedType]) {
+                    feedByType[log.feedType] = 0;
+                }
+                feedByType[log.feedType] += Number(log.feed);
+            }
+        });
+        
+        return { totalFeed, feedByType };
+    })() : { totalFeed: 0, feedByType: {} };
+
     return (
         <div className="space-y-4 pb-20 animate-fade-in">
-            {/* رأس الصفحة مع الإحصائيات */}
+            {/* رأس الصفحة */}
             <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-4 text-white">
                 <div className="flex justify-between items-center mb-3">
                     <h2 className="text-lg font-bold flex items-center gap-2">
-                        <Package size={24} /> إدارة المخزون
+                        <Package size={24} /> Inventory Management
                     </h2>
                     <div className="flex gap-2">
                         <button 
@@ -291,33 +280,34 @@ const InventoryManager = ({
                     </div>
                 </div>
                 
+                {/* الإحصائيات */}
                 <div className="grid grid-cols-2 gap-3 text-center">
                     <div className="bg-white/10 p-2 rounded-lg">
-                        <p className="text-xs opacity-80">إجمالي العناصر</p>
+                        <p className="text-xs opacity-80">Total Items</p>
                         <p className="font-bold text-lg">{inventoryStats.totalItems}</p>
                     </div>
                     <div className="bg-white/10 p-2 rounded-lg">
-                        <p className="text-xs opacity-80">قيمة المخزون</p>
-                        <p className="font-bold text-lg">{totalInventoryValue.toLocaleString()} ج</p>
+                        <p className="text-xs opacity-80">Total Value</p>
+                        <p className="font-bold text-lg">{formatNumber(inventoryStats.totalValue)} ج</p>
                     </div>
                     <div className="bg-white/10 p-2 rounded-lg">
-                        <p className="text-xs opacity-80">منخفض المخزون</p>
+                        <p className="text-xs opacity-80">Low Stock</p>
                         <p className="font-bold text-lg text-yellow-300">{inventoryStats.lowStockItems}</p>
                     </div>
                     <div className="bg-white/10 p-2 rounded-lg">
-                        <p className="text-xs opacity-80">الأعلاف</p>
+                        <p className="text-xs opacity-80">Feed Items</p>
                         <p className="font-bold text-lg">{inventoryStats.feedItems}</p>
                     </div>
                 </div>
             </div>
 
-            {/* شريط البحث والفلترة */}
+            {/* شريط البحث */}
             <div className="flex gap-2">
                 <div className="flex-1 relative">
                     <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                     <input
                         type="text"
-                        placeholder="ابحث عن عنصر في المخزون..."
+                        placeholder="Search inventory..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full p-3 pr-10 bg-white border border-gray-200 rounded-xl text-sm"
@@ -331,7 +321,7 @@ const InventoryManager = ({
                 </button>
             </div>
 
-            {/* أزرار الفلترة */}
+            {/* الفلاتر */}
             <div className="flex gap-2 overflow-x-auto pb-2">
                 <button 
                     onClick={() => setFilter('all')}
@@ -339,7 +329,7 @@ const InventoryManager = ({
                         filter === 'all' ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'
                     }`}
                 >
-                    الكل
+                    All
                 </button>
                 <button 
                     onClick={() => setFilter('low')}
@@ -347,7 +337,7 @@ const InventoryManager = ({
                         filter === 'low' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'
                     }`}
                 >
-                    <AlertTriangle size={12} className="inline mr-1" /> منخفض
+                    <AlertTriangle size={12} className="inline mr-1" /> Low
                 </button>
                 <button 
                     onClick={() => setFilter('feed')}
@@ -355,7 +345,7 @@ const InventoryManager = ({
                         filter === 'feed' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
                     }`}
                 >
-                    أعلاف
+                    Feed
                 </button>
                 <button 
                     onClick={() => setFilter('medicine')}
@@ -363,28 +353,17 @@ const InventoryManager = ({
                         filter === 'medicine' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'
                     }`}
                 >
-                    أدوية
+                    Medicine
                 </button>
-                {inventoryStats.expiredItems > 0 && (
-                    <button 
-                        onClick={() => setFilter('expired')}
-                        className={`px-3 py-2 rounded-lg text-xs font-bold whitespace-nowrap ${
-                            filter === 'expired' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'
-                        }`}
-                    >
-                        ⚠️ منتهي
-                    </button>
-                )}
                 <select 
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
                     className="px-3 py-2 rounded-lg text-xs font-bold bg-gray-100 text-gray-600 border-none"
                 >
-                    <option value="name">ترتيب أبجدي</option>
-                    <option value="stock">حسب الكمية</option>
-                    <option value="value">حسب القيمة</option>
-                    <option value="category">حسب النوع</option>
-                    <option value="expiry">حسب الصلاحية</option>
+                    <option value="name">Sort by Name</option>
+                    <option value="stock">Sort by Stock</option>
+                    <option value="value">Sort by Value</option>
+                    <option value="category">Sort by Category</option>
                 </select>
             </div>
 
@@ -392,8 +371,8 @@ const InventoryManager = ({
             {inventoryAlerts.length > 0 && (
                 <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                        <h3 className="font-bold text-gray-700 text-sm">📢 تنبيهات المخزون</h3>
-                        <span className="text-xs text-gray-500">{inventoryAlerts.length} تنبيه</span>
+                        <h3 className="font-bold text-gray-700 text-sm">⚠️ Inventory Alerts</h3>
+                        <span className="text-xs text-gray-500">{inventoryAlerts.length} alerts</span>
                     </div>
                     {inventoryAlerts.map((alert, index) => (
                         <div 
@@ -411,11 +390,13 @@ const InventoryManager = ({
                             <button 
                                 onClick={() => {
                                     const item = inventoryItems.find(i => i.id === alert.itemId);
-                                    if (item) handleRestock(item);
+                                    if (item) {
+                                        handleRestock(item);
+                                    }
                                 }}
                                 className="text-xs bg-white px-3 py-1 rounded-lg font-bold hover:opacity-80"
                             >
-                                تزويد
+                                Restock
                             </button>
                         </div>
                     ))}
@@ -426,20 +407,20 @@ const InventoryManager = ({
             {activeBatch && feedConsumptionAnalysis.totalFeed > 0 && (
                 <Card>
                     <h3 className="font-bold text-gray-700 text-sm flex items-center gap-2 mb-3">
-                        <BarChart3 size={18} className="text-green-500" /> تحليل استهلاك العلف للدورة الحالية
+                        <BarChart3 size={18} className="text-green-500" /> Feed Consumption Analysis
                     </h3>
                     <div className="space-y-2">
                         <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-600">إجمالي الاستهلاك:</span>
+                            <span className="text-sm text-gray-600">Total Consumption:</span>
                             <span className="font-bold text-green-600">
-                                {feedConsumptionAnalysis.totalFeed.toLocaleString()} كجم
+                                {formatNumber(feedConsumptionAnalysis.totalFeed)} kg
                             </span>
                         </div>
                         {Object.entries(feedConsumptionAnalysis.feedByType).map(([type, amount]) => (
                             <div key={type} className="flex justify-between items-center">
                                 <span className="text-sm text-gray-500">{type}:</span>
                                 <span className="font-medium">
-                                    {amount.toLocaleString()} كجم
+                                    {formatNumber(amount)} kg
                                 </span>
                             </div>
                         ))}
@@ -453,12 +434,12 @@ const InventoryManager = ({
                     {filteredItems.length === 0 ? (
                         <div className="text-center py-8 text-gray-400">
                             <Package size={48} className="mx-auto mb-3 opacity-30" />
-                            <p>لا توجد عناصر في المخزون</p>
+                            <p>No inventory items found</p>
                             <button 
                                 onClick={() => setView('new')}
                                 className="mt-3 text-orange-500 text-sm font-bold"
                             >
-                                + إضافة أول عنصر
+                                + Add First Item
                             </button>
                         </div>
                     ) : (
@@ -479,19 +460,19 @@ const InventoryManager = ({
                                                 </span>
                                                 {isExpired && (
                                                     <span className="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded">
-                                                        منتهي
+                                                        Expired
                                                     </span>
                                                 )}
                                                 {isLowStock && !isExpired && (
                                                     <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-600 rounded">
-                                                        منخفض
+                                                        Low
                                                     </span>
                                                 )}
                                             </div>
                                             <p className="text-xs text-gray-500">
-                                                {item.supplier && `المورد: ${item.supplier} • `}
-                                                الوحدة: {item.unit}
-                                                {item.expiryDate && ` • الصلاحية: ${new Date(item.expiryDate).toLocaleDateString('ar-SA')}`}
+                                                {item.supplier && `Supplier: ${item.supplier} • `}
+                                                Unit: {item.unit}
+                                                {item.expiryDate && ` • Expiry: ${new Date(item.expiryDate).toLocaleDateString('en-US')}`}
                                             </p>
                                         </div>
                                         <div className="text-right">
@@ -500,10 +481,10 @@ const InventoryManager = ({
                                                 isLowStock ? 'text-yellow-600' : 
                                                 'text-blue-600'
                                             }`}>
-                                                {item.currentStock.toLocaleString()} {item.unit}
+                                                {formatNumber(item.currentStock)} {item.unit}
                                             </p>
                                             <p className="text-xs text-gray-500">
-                                                {itemValue > 0 ? `${itemValue.toLocaleString()} ج` : ''}
+                                                {itemValue > 0 ? `${formatNumber(itemValue)} ج` : ''}
                                             </p>
                                         </div>
                                     </div>
@@ -511,8 +492,8 @@ const InventoryManager = ({
                                     {/* شريط مستوى المخزون */}
                                     <div className="mb-3">
                                         <div className="flex justify-between text-xs text-gray-500 mb-1">
-                                            <span>المخزون الحالي</span>
-                                            <span>حد إعادة الطلب: {item.minStock || 0}</span>
+                                            <span>Current Stock</span>
+                                            <span>Reorder Point: {item.minStock || 0}</span>
                                         </div>
                                         <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                                             <div 
@@ -531,30 +512,30 @@ const InventoryManager = ({
                                             <button 
                                                 onClick={() => handleEditItem(item)}
                                                 className="text-blue-500 hover:text-blue-600 p-1"
-                                                title="تعديل"
+                                                title="Edit"
                                             >
                                                 <Edit2 size={16} />
                                             </button>
                                             <button 
                                                 onClick={() => handleConsumption(item)}
-                                                className="text-green-500 hover:text-green-600 p-1"
-                                                title="استهلاك"
+                                                className="text-red-500 hover:text-red-600 p-1" // أحمر للاستهلاك
+                                                title="Consume"
                                             >
-                                                <TrendingDown size={16} />
+                                                <ArrowDownCircle size={16} />
                                             </button>
                                             <button 
                                                 onClick={() => handleRestock(item)}
-                                                className="text-orange-500 hover:text-orange-600 p-1"
-                                                title="تزويد"
+                                                className="text-green-500 hover:text-green-600 p-1" // أخضر للإضافة
+                                                title="Restock"
                                             >
-                                                <TrendingUp size={16} />
+                                                <ArrowUpCircle size={16} />
                                             </button>
                                             <button 
-                                                onClick={() => handleDelete('عنصر المخزون', () => 
+                                                onClick={() => handleDelete('inventory item', () => 
                                                     setInventoryItems(inventoryItems.filter(i => i.id !== item.id))
                                                 )}
-                                                className="text-red-500 hover:text-red-600 p-1"
-                                                title="حذف"
+                                                className="text-gray-500 hover:text-gray-600 p-1"
+                                                title="Delete"
                                             >
                                                 <Trash2 size={16} />
                                             </button>
@@ -562,14 +543,14 @@ const InventoryManager = ({
                                         {isLowStock && !isExpired && (
                                             <button 
                                                 onClick={() => handleRestock(item)}
-                                                className="text-xs bg-orange-100 text-orange-600 px-3 py-1 rounded-lg font-bold"
+                                                className="text-xs bg-green-100 text-green-600 px-3 py-1 rounded-lg font-bold" // أخضر
                                             >
-                                                <Plus size={12} className="inline mr-1" /> تزويد عاجل
+                                                <ArrowUpCircle size={12} className="inline mr-1" /> Restock
                                             </button>
                                         )}
                                         {isExpired && (
                                             <span className="text-xs bg-red-100 text-red-600 px-3 py-1 rounded-lg font-bold">
-                                                ⚠️ منتهي الصلاحية
+                                                ⚠️ Expired
                                             </span>
                                         )}
                                     </div>
@@ -580,22 +561,22 @@ const InventoryManager = ({
                 </div>
             )}
 
-            {/* نموذج إضافة/تعديل عنصر */}
+            {/* نموذج إضافة/تعديل */}
             {view === 'new' && (
                 <Card className="animate-slide-up">
                     <h3 className="font-bold mb-4 text-center">
-                        {editingItem ? 'تعديل عنصر المخزون' : 'إضافة عنصر جديد'}
+                        {editingItem ? 'Edit Inventory Item' : 'Add New Item'}
                     </h3>
                     
                     <Input 
-                        label="اسم العنصر" 
+                        label="Item Name" 
                         value={newItem.name} 
                         onChange={e => setNewItem({...newItem, name: e.target.value})} 
                     />
                     
                     <div className="grid grid-cols-2 gap-2">
                         <div>
-                            <label className="text-xs font-bold text-gray-400 mb-1 block">النوع</label>
+                            <label className="text-xs font-bold text-gray-400 mb-1 block">Category</label>
                             <select 
                                 className="w-full p-3 bg-gray-50 border rounded-xl"
                                 value={newItem.category}
@@ -607,39 +588,39 @@ const InventoryManager = ({
                             </select>
                         </div>
                         <Input 
-                            label="الوحدة" 
+                            label="Unit" 
                             value={newItem.unit} 
                             onChange={e => setNewItem({...newItem, unit: e.target.value})} 
-                            placeholder="كجم، لتر، علبة..."
+                            placeholder="kg, liter, box..."
                         />
                     </div>
                     
                     <div className="grid grid-cols-2 gap-2">
                         <Input 
-                            label="الكمية الحالية" 
+                            label="Current Stock" 
                             type="number" 
                             value={newItem.currentStock} 
                             onChange={e => setNewItem({...newItem, currentStock: e.target.value})} 
                         />
                         <Input 
-                            label="الحد الأدنى" 
+                            label="Minimum Stock" 
                             type="number" 
                             value={newItem.minStock} 
                             onChange={e => setNewItem({...newItem, minStock: e.target.value})} 
-                            placeholder="عندها يتم إعادة الطلب"
+                            placeholder="Reorder point"
                         />
                     </div>
                     
                     <div className="grid grid-cols-2 gap-2">
                         <Input 
-                            label="سعر الوحدة" 
+                            label="Cost per Unit" 
                             type="number" 
                             value={newItem.costPerUnit} 
                             onChange={e => setNewItem({...newItem, costPerUnit: e.target.value})} 
-                            placeholder="السعر بالجنية"
+                            placeholder="Price per unit"
                         />
                         <Input 
-                            label="تاريخ الصلاحية" 
+                            label="Expiry Date" 
                             type="date" 
                             value={newItem.expiryDate} 
                             onChange={e => setNewItem({...newItem, expiryDate: e.target.value})} 
@@ -647,17 +628,17 @@ const InventoryManager = ({
                     </div>
                     
                     <Input 
-                        label="المورد" 
+                        label="Supplier" 
                         value={newItem.supplier} 
                         onChange={e => setNewItem({...newItem, supplier: e.target.value})} 
-                        placeholder="اسم المورد أو الشركة"
+                        placeholder="Supplier name"
                     />
                     
                     <Input 
-                        label="ملاحظات" 
+                        label="Notes" 
                         value={newItem.notes} 
                         onChange={e => setNewItem({...newItem, notes: e.target.value})} 
-                        placeholder="أي معلومات إضافية"
+                        placeholder="Additional information"
                     />
                     
                     <div className="flex gap-2 mt-4">
@@ -666,7 +647,7 @@ const InventoryManager = ({
                             className="flex-1"
                             variant={editingItem ? "primary" : "success"}
                         >
-                            {editingItem ? 'حفظ التعديلات' : 'إضافة العنصر'}
+                            {editingItem ? 'Save Changes' : 'Add Item'}
                         </Button>
                         <Button 
                             onClick={() => {
@@ -675,56 +656,56 @@ const InventoryManager = ({
                             }} 
                             variant="ghost"
                         >
-                            إلغاء
+                            Cancel
                         </Button>
                     </div>
                 </Card>
             )}
 
-            {/* نافذة استهلاك المخزون */}
+            {/* نافذة الاستهلاك */}
             <Modal 
                 isOpen={consumptionModal} 
                 onClose={() => setConsumptionModal(false)} 
-                title={`استهلاك ${selectedItemForConsumption?.name}`}
+                title={`Consume - ${selectedItem?.name}`}
             >
-                {selectedItemForConsumption && (
+                {selectedItem && (
                     <div className="space-y-4">
-                        <div className="bg-blue-50 p-3 rounded-lg">
+                        <div className="bg-red-50 p-3 rounded-lg border border-red-100">
+                            <div className="flex items-center gap-2 mb-2">
+                                <ArrowDownCircle className="text-red-600" size={20} />
+                                <p className="text-sm text-red-800 font-bold">Deduct from Inventory</p>
+                            </div>
                             <p className="text-sm text-gray-700">
-                                المخزون المتاح: <span className="font-bold">
-                                    {selectedItemForConsumption.currentStock} {selectedItemForConsumption.unit}
+                                Available stock: <span className="font-bold text-red-600">
+                                    {formatNumber(selectedItem.currentStock)} {selectedItem.unit}
                                 </span>
                             </p>
-                            {selectedItemForConsumption.costPerUnit && (
+                            {selectedItem.costPerUnit && (
                                 <p className="text-sm text-gray-700 mt-1">
-                                    سعر الوحدة: <span className="font-bold">
-                                        {selectedItemForConsumption.costPerUnit} ج
-                                    </span>
-                                </p>
-                            )}
-                            {selectedItemForConsumption.expiryDate && (
-                                <p className="text-sm text-gray-700 mt-1">
-                                    تاريخ الصلاحية: <span className="font-bold">
-                                        {new Date(selectedItemForConsumption.expiryDate).toLocaleDateString('ar-SA')}
+                                    Cost per unit: <span className="font-bold">
+                                        {selectedItem.costPerUnit} ج
                                     </span>
                                 </p>
                             )}
                         </div>
                         
                         <Input 
-                            label="الكمية المستهلكة" 
+                            label="Quantity to Consume" 
                             type="number" 
                             value={consumptionAmount} 
                             onChange={e => setConsumptionAmount(e.target.value)} 
-                            placeholder={`أدخل الكمية (${selectedItemForConsumption.unit})`}
+                            placeholder={`Enter quantity (${selectedItem.unit})`}
                         />
                         
-                        {consumptionAmount && selectedItemForConsumption.costPerUnit && (
-                            <div className="bg-green-50 p-3 rounded-lg">
-                                <p className="text-sm text-gray-700">
-                                    التكلفة الإجمالية: <span className="font-bold text-green-600">
-                                        {(consumptionAmount * selectedItemForConsumption.costPerUnit).toLocaleString()} ج
+                        {consumptionAmount && selectedItem.costPerUnit && (
+                            <div className="bg-red-100 p-3 rounded-lg">
+                                <p className="text-sm text-red-800">
+                                    Total cost: <span className="font-bold">
+                                        {formatNumber(consumptionAmount * selectedItem.costPerUnit)} ج
                                     </span>
+                                </p>
+                                <p className="text-xs text-red-600 mt-1">
+                                    Stock after: {formatNumber(selectedItem.currentStock - consumptionAmount)} {selectedItem.unit}
                                 </p>
                             </div>
                         )}
@@ -733,26 +714,93 @@ const InventoryManager = ({
                             <Button 
                                 onClick={saveConsumption} 
                                 className="flex-1"
-                                variant="success"
+                                variant="danger" // أحمر
                             >
-                                تأكيد الاستهلاك
+                                <ArrowDownCircle size={16} className="mr-2" /> Confirm Consumption
                             </Button>
                             <Button 
                                 onClick={() => setConsumptionModal(false)} 
                                 variant="ghost"
                             >
-                                إلغاء
+                                Cancel
                             </Button>
                         </div>
                     </div>
                 )}
             </Modal>
 
-            {/* نافذة تقرير المخزون */}
+            {/* نافذة إضافة المخزون */}
+            <Modal 
+                isOpen={restockModal} 
+                onClose={() => setRestockModal(false)} 
+                title={`Restock - ${selectedItem?.name}`}
+            >
+                {selectedItem && (
+                    <div className="space-y-4">
+                        <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+                            <div className="flex items-center gap-2 mb-2">
+                                <ArrowUpCircle className="text-green-600" size={20} />
+                                <p className="text-sm text-green-800 font-bold">Add to Inventory</p>
+                            </div>
+                            <p className="text-sm text-gray-700">
+                                Current stock: <span className="font-bold text-green-600">
+                                    {formatNumber(selectedItem.currentStock)} {selectedItem.unit}
+                                </span>
+                            </p>
+                            {selectedItem.costPerUnit && (
+                                <p className="text-sm text-gray-700 mt-1">
+                                    Cost per unit: <span className="font-bold">
+                                        {selectedItem.costPerUnit} ج
+                                    </span>
+                                </p>
+                            )}
+                        </div>
+                        
+                        <Input 
+                            label="Quantity to Add" 
+                            type="number" 
+                            value={restockAmount} 
+                            onChange={e => setRestockAmount(e.target.value)} 
+                            placeholder={`Enter quantity (${selectedItem.unit})`}
+                        />
+                        
+                        {restockAmount && selectedItem.costPerUnit && (
+                            <div className="bg-green-100 p-3 rounded-lg">
+                                <p className="text-sm text-green-800">
+                                    Total cost: <span className="font-bold">
+                                        {formatNumber(restockAmount * selectedItem.costPerUnit)} ج
+                                    </span>
+                                </p>
+                                <p className="text-xs text-green-600 mt-1">
+                                    Stock after: {formatNumber(selectedItem.currentStock + Number(restockAmount))} {selectedItem.unit}
+                                </p>
+                            </div>
+                        )}
+                        
+                        <div className="flex gap-2">
+                            <Button 
+                                onClick={saveRestock} 
+                                className="flex-1"
+                                variant="success" // أخضر
+                            >
+                                <ArrowUpCircle size={16} className="mr-2" /> Confirm Restock
+                            </Button>
+                            <Button 
+                                onClick={() => setRestockModal(false)} 
+                                variant="ghost"
+                            >
+                                Cancel
+                            </Button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
+            {/* تقرير المخزون */}
             <Modal 
                 isOpen={showReport} 
                 onClose={() => setShowReport(false)} 
-                title="تقرير المخزون الشامل"
+                title="Inventory Report"
                 size="lg"
             >
                 <InventoryReport 
