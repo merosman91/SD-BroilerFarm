@@ -6,11 +6,40 @@ export const addDays = (date, days) => {
     return result.toISOString().split('T')[0];
 };
 
-// دالة formatDate
+// تحديث دالة formatDate
 export const formatDate = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
-    return date.toLocaleDateString('ar-SA');
+    return date.toLocaleDateString('en-US', {  // تغيير من ar-SA إلى en-US
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+    });
+};
+
+// دالة جديدة للتاريخ الميلادي الكامل
+export const formatGregorianDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+};
+
+// دالة للتاريخ الميلادي مع الوقت
+export const formatDateTime = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
 };
 
 // دالة generateDefaultSchedule
