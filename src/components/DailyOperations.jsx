@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Skull, Wheat, Edit2, Trash2, AlertCircle, 
     Calculator, Thermometer as ThermometerIcon, Scale 
 } from 'lucide-react';
-import { Button, Card, Input } from '../UI';
+import { Button, Card } from '../UI';
 import { formatDate, FEED_TYPES, DEATH_CAUSES, checkAndDeductFeed } from '../utils/helpers';
 
 const DailyOperations = ({ 
@@ -28,11 +28,18 @@ const DailyOperations = ({
         notes: '' 
     });
 
+    // إعادة تعيين النموذج عند تغيير العرض
+    useEffect(() => {
+        if (view === 'new' && !log.id) {
+            resetLogForm();
+        }
+    }, [view]);
+
     if (!activeBatch) {
         return (
             <div className="text-center py-10">
                 <AlertCircle className="mx-auto text-gray-300 mb-3" size={48} />
-                <p className="text-gray-500">Start a batch to add daily logs</p>
+                <p className="text-gray-500">ابدأ دورة جديدة لإضافة سجلات يومية</p>
             </div>
         );
     }
@@ -40,18 +47,20 @@ const DailyOperations = ({
     const saveLog = () => {
         const errors = [];
         
-        if (!log.date) errors.push("Date is required");
-        if (log.dead && isNaN(log.dead)) errors.push("Mortality must be a number");
-        if (log.feed && isNaN(log.feed)) errors.push("Feed must be a number");
+        if (!log.date) errors.push("التاريخ مطلوب");
+        if (log.dead && (isNaN(Number(log.dead)) || Number(log.dead) < 0)) errors.push("عدد النافق يجب أن يكون رقم صحيح موجب");
+        if (log.feed && (isNaN(Number(log.feed)) || Number(log.feed) < 0)) errors.push("كمية العلف يجب أن تكون رقم موجب");
+        if (log.avgWeight && (isNaN(Number(log.avgWeight)) || Number(log.avgWeight) < 0)) errors.push("الوزن يجب أن يكون رقم موجب");
+        if (log.temp && (isNaN(Number(log.temp)) || Number(log.temp) < 0)) errors.push("درجة الحرارة يجب أن تكون رقم موجب");
         
         if (errors.length > 0) {
-            errors.forEach(error => showNotify(error));
+            errors.forEach(error => showNotify(`✗ ${error}`));
             return;
         }
 
         // خصم العلف من المخزون إذا تم إدخاله
         let inventoryUpdate = null;
-        if (log.feed && log.feed > 0 && log.feedType) {
+        if (log.feed && Number(log.feed) > 0 && log.feedType) {
             const result = checkAndDeductFeed(inventoryItems, log.feedType, Number(log.feed));
             
             if (!result.success) {
@@ -63,27 +72,44 @@ const DailyOperations = ({
             setInventoryItems(result.updatedInventory);
         }
 
+        // حساب اليوم من بداية الدورة
+        const dayNumber = Math.ceil((new Date(log.date) - new Date(activeBatch.startDate)) / (1000 * 60 * 60 * 24));
+        
         if (log.id) {
             // تعديل سجل موجود
             setDailyLogs(dailyLogs.map(l => 
-                l.id === log.id ? { ...log, batchId: activeBatch.id } : l
+                l.id === log.id ? { 
+                    ...log, 
+                    batchId: activeBatch.id,
+                    dayNumber: dayNumber,
+                    feed: log.feed ? Number(log.feed) : 0,
+                    dead: log.dead ? Number(log.dead) : 0,
+                    avgWeight: log.avgWeight ? Number(log.avgWeight) : null,
+                    temp: log.temp ? Number(log.temp) : null,
+                    feedCost: inventoryUpdate?.cost || l.feedCost || 0
+                } : l
             ));
-            showNotify("Record updated ✏️");
+            showNotify("تم تحديث السجل ✏️");
         } else {
             // سجل جديد
             const newLog = {
                 ...log,
                 id: Date.now(),
                 batchId: activeBatch.id,
+                dayNumber: dayNumber,
+                feed: log.feed ? Number(log.feed) : 0,
+                dead: log.dead ? Number(log.dead) : 0,
+                avgWeight: log.avgWeight ? Number(log.avgWeight) : null,
+                temp: log.temp ? Number(log.temp) : null,
                 feedCost: inventoryUpdate?.cost || 0
             };
             
             setDailyLogs([...dailyLogs, newLog]);
             
             if (inventoryUpdate) {
-                showNotify(`✓ Daily log saved. ${inventoryUpdate.message}`);
+                showNotify(`✓ تم حفظ السجل اليومي. ${inventoryUpdate.message}`);
             } else {
-                showNotify("Daily log saved ✅");
+                showNotify("تم حفظ السجل اليومي ✅");
             }
         }
 
@@ -92,7 +118,13 @@ const DailyOperations = ({
     };
 
     const handleEditLog = (item) => {
-        setLog(item);
+        setLog({
+            ...item,
+            dead: item.dead || '',
+            feed: item.feed || '',
+            avgWeight: item.avgWeight || '',
+            temp: item.temp || ''
+        });
         setView('new');
     };
 
@@ -135,7 +167,7 @@ const DailyOperations = ({
                         view === 'list' ? 'bg-white shadow text-orange-600' : 'text-gray-500'
                     }`}
                 >
-                    Logs
+                    السجلات
                 </button>
                 <button 
                     onClick={() => setView('new')} 
@@ -143,7 +175,7 @@ const DailyOperations = ({
                         view === 'new' ? 'bg-white shadow text-orange-600' : 'text-gray-500'
                     }`}
                 >
-                    {log.id ? 'Edit' : 'New Log'}
+                    {log.id ? 'تعديل السجل' : 'سجل جديد'}
                 </button>
             </div>
 
@@ -154,13 +186,14 @@ const DailyOperations = ({
                         {/* التاريخ */}
                         <div>
                             <label className="text-xs font-bold text-gray-700 block mb-2">
-                                📅 Date
+                                📅 التاريخ
                             </label>
                             <input
                                 type="date"
                                 value={log.date}
                                 onChange={e => setLog({...log, date: e.target.value})}
                                 className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+                                max={new Date().toISOString().split('T')[0]}
                             />
                         </div>
 
@@ -168,15 +201,17 @@ const DailyOperations = ({
                         <div className="border border-red-200 rounded-xl p-4 bg-gradient-to-br from-red-50 to-white">
                             <div className="flex items-center gap-2 mb-3">
                                 <Skull size={18} className="text-red-600" />
-                                <h3 className="font-bold text-red-800 text-sm">Mortality</h3>
+                                <h3 className="font-bold text-red-800 text-sm">النافق</h3>
                             </div>
                             
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="text-xs text-gray-600 block mb-1">Number of Deaths</label>
+                                    <label className="text-xs text-gray-600 block mb-1">عدد النافق</label>
                                     <div className="relative">
                                         <input
                                             type="number"
+                                            min="0"
+                                            step="1"
                                             value={log.dead}
                                             onChange={e => setLog({...log, dead: e.target.value})}
                                             placeholder="0"
@@ -193,7 +228,7 @@ const DailyOperations = ({
                                 </div>
                                 
                                 <div>
-                                    <label className="text-xs text-gray-600 block mb-1">Death Cause</label>
+                                    <label className="text-xs text-gray-600 block mb-1">سبب النفوق</label>
                                     <select
                                         value={log.deadCause}
                                         onChange={e => setLog({...log, deadCause: e.target.value})}
@@ -209,7 +244,7 @@ const DailyOperations = ({
                             {log.dead > 0 && (
                                 <div className="mt-3 p-2 bg-red-100 rounded-lg">
                                     <p className="text-xs text-red-700">
-                                        <span className="font-bold">{log.dead}</span> birds died due to 
+                                        <span className="font-bold">{log.dead}</span> طائر نافق بسبب 
                                         <span className="font-bold"> {log.deadCause}</span>
                                     </p>
                                 </div>
@@ -221,31 +256,33 @@ const DailyOperations = ({
                             <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2">
                                     <Wheat size={18} className="text-amber-600" />
-                                    <h3 className="font-bold text-amber-800 text-sm">Feed Consumption</h3>
+                                    <h3 className="font-bold text-amber-800 text-sm">استهلاك العلف</h3>
                                 </div>
                                 
                                 {log.feedType && (
                                     <div className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded">
-                                        Stock: {checkFeedStock(log.feedType)} kg
+                                        المخزون: {checkFeedStock(log.feedType)} كجم
                                     </div>
                                 )}
                             </div>
                             
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="text-xs text-gray-600 block mb-1">Quantity (kg)</label>
+                                    <label className="text-xs text-gray-600 block mb-1">الكمية (كجم)</label>
                                     <div className="relative">
                                         <input
                                             type="number"
+                                            min="0"
+                                            step="0.5"
                                             value={log.feed}
                                             onChange={e => setLog({...log, feed: e.target.value})}
                                             placeholder="0"
                                             className="w-full p-3 bg-white border border-amber-200 rounded-lg text-sm"
                                         />
-                                        {log.feed > 0 && (
+                                        {log.feed > 0 && checkFeedStock(log.feedType) > 0 && (
                                             <div className="absolute left-2 top-1/2 transform -translate-y-1/2">
                                                 <span className="text-xs text-amber-600 font-bold">
-                                                    {(log.feed / checkFeedStock(log.feedType) * 100).toFixed(0)}%
+                                                    {((log.feed / checkFeedStock(log.feedType)) * 100).toFixed(0)}%
                                                 </span>
                                             </div>
                                         )}
@@ -253,7 +290,7 @@ const DailyOperations = ({
                                 </div>
                                 
                                 <div>
-                                    <label className="text-xs text-gray-600 block mb-1">Feed Type</label>
+                                    <label className="text-xs text-gray-600 block mb-1">نوع العلف</label>
                                     <select
                                         value={log.feedType}
                                         onChange={e => setLog({...log, feedType: e.target.value})}
@@ -263,7 +300,7 @@ const DailyOperations = ({
                                             const stock = checkFeedStock(feed.name);
                                             return (
                                                 <option key={feed.code} value={feed.name}>
-                                                    {feed.name} {stock < 500 ? `(${stock} kg)` : ''}
+                                                    {feed.name} {stock < 500 ? `(${stock} كجم)` : ''}
                                                 </option>
                                             );
                                         })}
@@ -275,12 +312,12 @@ const DailyOperations = ({
                                 <div className="mt-3 grid grid-cols-2 gap-2">
                                     <div className="p-2 bg-amber-100 rounded-lg">
                                         <p className="text-xs text-amber-700">
-                                            Will deduct <span className="font-bold">{log.feed} kg</span>
+                                            سيتم خصم <span className="font-bold">{log.feed} كجم</span>
                                         </p>
                                     </div>
                                     <div className="p-2 bg-green-100 rounded-lg">
                                         <p className="text-xs text-green-700">
-                                            From <span className="font-bold">{log.feedType}</span>
+                                            من <span className="font-bold">{log.feedType}</span>
                                         </p>
                                     </div>
                                 </div>
@@ -291,26 +328,30 @@ const DailyOperations = ({
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                                 <label className="text-xs font-bold text-gray-700 block mb-2 flex items-center gap-1">
-                                    <Scale size={14} /> Average Weight (gm)
+                                    <Scale size={14} /> متوسط الوزن (جرام)
                                 </label>
                                 <input
                                     type="number"
+                                    min="0"
+                                    step="1"
                                     value={log.avgWeight}
                                     onChange={e => setLog({...log, avgWeight: e.target.value})}
-                                    placeholder="e.g., 1500"
+                                    placeholder="مثال: 1500"
                                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"
                                 />
                             </div>
                             
                             <div>
                                 <label className="text-xs font-bold text-gray-700 block mb-2 flex items-center gap-1">
-                                    <ThermometerIcon size={14} /> Temperature °C
+                                    <ThermometerIcon size={14} /> درجة الحرارة °م
                                 </label>
                                 <input
                                     type="number"
+                                    min="0"
+                                    step="0.1"
                                     value={log.temp}
                                     onChange={e => setLog({...log, temp: e.target.value})}
-                                    placeholder="e.g., 25"
+                                    placeholder="مثال: 25"
                                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"
                                 />
                             </div>
@@ -319,21 +360,32 @@ const DailyOperations = ({
                         {/* الملاحظات */}
                         <div>
                             <label className="text-xs font-bold text-gray-700 block mb-2">
-                                📝 Notes
+                                📝 ملاحظات
                             </label>
                             <textarea
                                 value={log.notes}
                                 onChange={e => setLog({...log, notes: e.target.value})}
-                                placeholder="Any additional notes or observations..."
+                                placeholder="أي ملاحظات أو مشاهدات إضافية..."
                                 rows="3"
                                 className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"
                             />
                         </div>
 
-                        {/* زر الحفظ */}
-                        <Button onClick={saveLog} className="w-full">
-                            {log.id ? 'Save Changes' : 'Save Daily Log'}
-                        </Button>
+                        {/* أزرار الحفظ والإلغاء */}
+                        <div className="flex gap-3">
+                            <Button 
+                                onClick={() => {
+                                    resetLogForm();
+                                    setView('list');
+                                }} 
+                                className="flex-1 bg-gray-200 text-gray-700 hover:bg-gray-300"
+                            >
+                                إلغاء
+                            </Button>
+                            <Button onClick={saveLog} className="flex-1">
+                                {log.id ? 'حفظ التعديلات' : 'حفظ السجل اليومي'}
+                            </Button>
+                        </div>
                     </div>
                 </Card>
             )}
@@ -344,8 +396,8 @@ const DailyOperations = ({
                     {currentLogs.length === 0 ? (
                         <div className="text-center py-8 bg-gray-50 rounded-xl">
                             <Calculator className="mx-auto text-gray-300 mb-3" size={32} />
-                            <p className="text-gray-500">No daily logs yet</p>
-                            <p className="text-sm text-gray-400 mt-1">Start by adding your first daily log</p>
+                            <p className="text-gray-500">لا توجد سجلات يومية حتى الآن</p>
+                            <p className="text-sm text-gray-400 mt-1">ابدأ بإضافة أول سجل يومي</p>
                         </div>
                     ) : (
                         currentLogs.map(l => (
@@ -354,23 +406,23 @@ const DailyOperations = ({
                                     <div>
                                         <h3 className="font-bold text-gray-800">{formatDate(l.date)}</h3>
                                         <p className="text-xs text-gray-500">
-                                            Day {Math.ceil((new Date(l.date) - new Date(activeBatch.startDate)) / (1000 * 60 * 60 * 24))}
+                                            اليوم {l.dayNumber || Math.ceil((new Date(l.date) - new Date(activeBatch.startDate)) / (1000 * 60 * 60 * 24))}
                                         </p>
                                     </div>
                                     <div className="flex gap-2">
                                         <button 
                                             onClick={() => handleEditLog(l)}
                                             className="text-blue-500 hover:text-blue-600 p-1"
-                                            title="Edit"
+                                            title="تعديل"
                                         >
                                             <Edit2 size={16} />
                                         </button>
                                         <button 
-                                            onClick={() => handleDelete('daily log', () => 
+                                            onClick={() => handleDelete('سجل يومي', () => 
                                                 setDailyLogs(dailyLogs.filter(d => d.id !== l.id))
                                             )}
                                             className="text-red-500 hover:text-red-600 p-1"
-                                            title="Delete"
+                                            title="حذف"
                                         >
                                             <Trash2 size={16} />
                                         </button>
@@ -381,16 +433,16 @@ const DailyOperations = ({
                                 <div className="grid grid-cols-3 gap-3 mb-2">
                                     {/* العلف */}
                                     <div className="bg-amber-50 p-2 rounded-lg text-center">
-                                        <p className="text-xs text-amber-600 mb-1">Feed</p>
+                                        <p className="text-xs text-amber-600 mb-1">العلف</p>
                                         <div>
-                                            <p className="font-bold text-amber-700">{l.feed || 0} kg</p>
+                                            <p className="font-bold text-amber-700">{l.feed || 0} كجم</p>
                                             <p className="text-[10px] text-amber-500">{l.feedType || '-'}</p>
                                         </div>
                                     </div>
                                     
                                     {/* النافق */}
                                     <div className="bg-red-50 p-2 rounded-lg text-center">
-                                        <p className="text-xs text-red-600 mb-1">Mortality</p>
+                                        <p className="text-xs text-red-600 mb-1">النافق</p>
                                         <div>
                                             <p className="font-bold text-red-700">{l.dead || 0}</p>
                                             <p className="text-[10px] text-red-500">{l.deadCause || '-'}</p>
@@ -399,8 +451,8 @@ const DailyOperations = ({
                                     
                                     {/* الوزن */}
                                     <div className="bg-blue-50 p-2 rounded-lg text-center">
-                                        <p className="text-xs text-blue-600 mb-1">Avg. Weight</p>
-                                        <p className="font-bold text-blue-700">{l.avgWeight || '-'} gm</p>
+                                        <p className="text-xs text-blue-600 mb-1">متوسط الوزن</p>
+                                        <p className="font-bold text-blue-700">{l.avgWeight || '-'} جرام</p>
                                     </div>
                                 </div>
                                 
@@ -408,12 +460,12 @@ const DailyOperations = ({
                                 <div className="grid grid-cols-2 gap-2">
                                     {l.temp && (
                                         <div className="text-xs text-gray-500">
-                                            <span className="font-bold">Temp:</span> {l.temp}°C
+                                            <span className="font-bold">الحرارة:</span> {l.temp}°م
                                         </div>
                                     )}
                                     {l.feedCost > 0 && (
                                         <div className="text-xs text-gray-500 text-right">
-                                            <span className="font-bold">Feed Cost:</span> {l.feedCost.toFixed(2)} ج
+                                            <span className="font-bold">تكلفة العلف:</span> {l.feedCost.toFixed(2)} ج
                                         </div>
                                     )}
                                 </div>
