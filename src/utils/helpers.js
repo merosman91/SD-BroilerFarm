@@ -43,10 +43,30 @@ export const INVENTORY_CATEGORIES = [
 
 // أنواع العلف الأساسية للمخزون
 export const FEED_TYPES = [
-    { name: 'بادي 23%', code: 'B23', protein: 23, pricePerKg: 2.8 },
-    { name: 'نامي 21%', code: 'N21', protein: 21, pricePerKg: 2.5 },
-    { name: 'ناهي 19%', code: 'F19', protein: 19, pricePerKg: 2.3 },
-    { name: 'بياض 17%', code: 'L17', protein: 17, pricePerKg: 2.1 }
+    { 
+        name: 'بادي 23%', 
+        code: 'starter', 
+        protein: '23%',
+        pricePerKg: 3.02 
+    },
+    { 
+        name: 'نامي 21%', 
+        code: 'grower', 
+        protein: '21%',
+        pricePerKg: 2.85 
+    },
+    { 
+        name: 'ناهي 19%', 
+        code: 'finisher', 
+        protein: '19%',
+        pricePerKg: 2.70 
+    },
+    { 
+        name: 'بياض 17%', 
+        code: 'layer', 
+        protein: '17%',
+        pricePerKg: 2.55 
+    }
 ];
 
 export const DEATH_CAUSES = [
@@ -166,34 +186,43 @@ export const createInitialFeedInventory = () => {
 // تحذيرات المخزون
 export const generateInventoryAlerts = (inventoryItems) => {
     const alerts = [];
-    const today = new Date();
     
     inventoryItems.forEach(item => {
-        // تحذير المخزون المنخفض
-        if (item.currentStock <= item.minStock) {
+        // تحقق من المخزون المنخفض
+        if (item.currentStock <= item.minStock && item.currentStock > 0) {
             alerts.push({
-                type: 'danger',
-                message: `${item.name} - منخفض المخزون (${item.currentStock} ${item.unit})`,
-                itemId: item.id
+                type: 'warning',
+                itemId: item.id,
+                message: `المخزون منخفض: ${item.name} (${item.currentStock} ${item.unit})`
             });
         }
         
-        // تحذير انتهاء الصلاحية
+        // تحقق من نفاد المخزون
+        if (item.currentStock <= 0) {
+            alerts.push({
+                type: 'danger',
+                itemId: item.id,
+                message: `نفاذ المخزون: ${item.name}`
+            });
+        }
+        
+        // تحقق من تاريخ الانتهاء
         if (item.expiryDate) {
             const expiryDate = new Date(item.expiryDate);
-            const daysToExpiry = Math.floor((expiryDate - today) / (1000 * 60 * 60 * 24));
+            const today = new Date();
+            const daysDiff = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
             
-            if (daysToExpiry <= 7 && daysToExpiry > 0) {
+            if (daysDiff <= 30 && daysDiff > 0) {
                 alerts.push({
                     type: 'warning',
-                    message: `${item.name} - تنتهي صلاحيته خلال ${daysToExpiry} أيام`,
-                    itemId: item.id
+                    itemId: item.id,
+                    message: `ينتهي خلال ${daysDiff} يوم: ${item.name}`
                 });
-            } else if (daysToExpiry <= 0) {
+            } else if (expiryDate < today) {
                 alerts.push({
                     type: 'danger',
-                    message: `${item.name} - منتهي الصلاحية`,
-                    itemId: item.id
+                    itemId: item.id,
+                    message: `منتهي الصلاحية: ${item.name}`
                 });
             }
         }
