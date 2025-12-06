@@ -15,7 +15,7 @@ import Financials from './components/Financials';
 import InventoryManager from './components/InventoryManager';
 
 // استيراد الدوال المساعدة
-import { formatDate, addDays } from './utils/helpers';
+import { formatDate, addDays } from '/utils/helpers';
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
