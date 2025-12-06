@@ -1,4 +1,3 @@
-// components/InventoryReport.jsx
 import React from 'react';
 import { Download, Printer, Share2, FileText, AlertTriangle, Package } from 'lucide-react';
 import { Button } from '../UI';
