@@ -128,14 +128,16 @@ const SplashScreen = ({ onFinish, duration = 4000 }) => {
                     <div className={`bg-gradient-to-r ${features[currentFeature].color} p-6 rounded-2xl shadow-2xl border border-white/20 backdrop-blur-sm`}>
                         <div className="flex items-center gap-4 mb-4">
                             <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                                <features[currentFeature].icon size={28} className="text-white" />
+                                {features[currentFeature].icon && 
+                                    <features[currentFeature].icon size={28} className="text-white" />
+                                }
                             </div>
                             <div className="text-right flex-1">
                                 <h3 className="text-xl font-bold text-white mb-1">
-                                    <features[currentFeature].title>
+                                    {features[currentFeature].title}
                                 </h3>
                                 <p className="text-white/90">
-                                    <features[currentFeature].description>
+                                    {features[currentFeature].description}
                                 </p>
                             </div>
                         </div>
