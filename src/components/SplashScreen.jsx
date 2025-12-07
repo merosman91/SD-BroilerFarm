@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bird, Code, Feather, Zap, TrendingUp, Shield, Database, Smartphone } from 'lucide-react';
+import { Bird, Feather, TrendingUp, Shield, Database, Smartphone } from 'lucide-react';
 
 const SplashScreen = ({ onFinish, duration = 4000 }) => {
     const [progress, setProgress] = useState(0);
@@ -87,6 +87,10 @@ const SplashScreen = ({ onFinish, duration = 4000 }) => {
 
     if (!show) return null;
 
+    // الحصول على الميزة الحالية
+    const currentFeatureData = features[currentFeature];
+    const IconComponent = currentFeatureData.icon;
+
     return (
         <div className="fixed inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 z-50 flex flex-col items-center justify-center overflow-hidden">
             {/* خلفية متحركة */}
@@ -125,19 +129,19 @@ const SplashScreen = ({ onFinish, duration = 4000 }) => {
             {/* عرض الميزات */}
             <div className="w-full max-w-md mb-10 px-4">
                 <div className={`transition-all duration-500 transform ${fadeIn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-                    <div className={`bg-gradient-to-r ${features[currentFeature].color} p-6 rounded-2xl shadow-2xl border border-white/20 backdrop-blur-sm`}>
+                    <div className={`bg-gradient-to-r ${currentFeatureData.color} p-6 rounded-2xl shadow-2xl border border-white/20 backdrop-blur-sm`}>
                         <div className="flex items-center gap-4 mb-4">
                             <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                                {features[currentFeature].icon && 
-                                    <features[currentFeature].icon size={28} className="text-white" />
+                                {IconComponent && 
+                                    <IconComponent size={28} className="text-white" />
                                 }
                             </div>
                             <div className="text-right flex-1">
                                 <h3 className="text-xl font-bold text-white mb-1">
-                                    {features[currentFeature].title}
+                                    {currentFeatureData.title}
                                 </h3>
                                 <p className="text-white/90">
-                                    {features[currentFeature].description}
+                                    {currentFeatureData.description}
                                 </p>
                             </div>
                         </div>
