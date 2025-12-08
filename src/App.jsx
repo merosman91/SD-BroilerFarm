@@ -18,7 +18,7 @@ import InventoryManager from './components/InventoryManager.jsx';
 import DeveloperInfo from './components/DeveloperInfo.jsx';
 
 // استيراد الدوال المساعدة
-import { formatDate, addDays, formatNumber, calculateTotalRevenue, analyzeFinancialPerformance } from './utils/helpers.jsx';
+import { formatDate, addDays, formatNumber, calculateTotalRevenue, analyzeFinancialPerformance } from './utils/helpers.js';
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
