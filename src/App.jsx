@@ -5,20 +5,20 @@ import {
   AlertCircle, Info, Share2, User, LogOut,
   Home, Shield, Database, Smartphone
 } from 'lucide-react';
-import { Button, Modal, InitialSetup } from './UI';
+import { Button, Modal, InitialSetup } from './Ui.jsx';
 
 // استيراد المكونات المنفصلة
-import SplashScreen from './components/SplashScreen';
-import Dashboard from './components/Dashboard';
-import HealthManager from './components/HealthManager';
-import BatchManager from './components/BatchManager';
-import DailyOperations from './components/DailyOperations';
-import Financials from './components/Financials';
-import InventoryManager from './components/InventoryManager';
-import DeveloperInfo from './components/DeveloperInfo';
+import SplashScreen from './components/SplashScreen.jsx';
+import Dashboard from './components/Dashboard.jsx';
+import HealthManager from './components/HealthManager.jsx';
+import BatchManager from './components/BatchManager.jsx';
+import DailyOperations from './components/DailyOperations.jsx';
+import Financials from './components/Financials.jsx';
+import InventoryManager from './components/InventoryManager.jsx';
+import DeveloperInfo from './components/DeveloperInfo.jsx';
 
 // استيراد الدوال المساعدة
-import { formatDate, addDays, formatNumber, calculateTotalRevenue, analyzeFinancialPerformance } from './utils/helpers';
+import { formatDate, addDays, formatNumber, calculateTotalRevenue, analyzeFinancialPerformance } from './utils/helpers.jsx';
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
