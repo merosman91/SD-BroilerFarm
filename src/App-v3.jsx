@@ -8,7 +8,7 @@ import {
 import { Button, Modal, InitialSetup } from './UI.jsx';
 
 // استيراد المكونات المنفصلة
-import SplashScreen from './components/SplashScreen.jsx';
+//import SplashScreen from './components/SplashScreen.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import HealthManager from './components/HealthManager.jsx';
 import BatchManager from './components/BatchManager.jsx';
