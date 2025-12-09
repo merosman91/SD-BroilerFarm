@@ -5,7 +5,7 @@ import {
   AlertCircle, Info, Share2, User, LogOut,
   Home, Shield, Database, Smartphone
 } from 'lucide-react';
-import { Button, Modal, InitialSetup } from './Ui.jsx';
+import { Button, Modal, InitialSetup } from './UI.jsx';
 
 // استيراد المكونات المنفصلة
 //import SplashScreen from './components/SplashScreen.jsx';
