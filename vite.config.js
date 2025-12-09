@@ -17,7 +17,7 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: './icon-512.png',
+            src: '/icon-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'
@@ -26,4 +26,14 @@ export default defineConfig({
       }
     })
   ],
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: undefined
+      }
+    }
+  },
+  base: './'  // مهم جداً لـ Vercel!
 })
