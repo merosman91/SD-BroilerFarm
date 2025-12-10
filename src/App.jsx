@@ -15,7 +15,7 @@ import BatchManager from './components/BatchManager.jsx';
 import DailyOperations from './components/DailyOperations.jsx';
 import Financials from './components/Financials.jsx';
 import InventoryManager from './components/InventoryManager.jsx';
-import DeveloperInfo from './components/DeveloperInfo.jsx';
+//import DeveloperInfo from './components/DeveloperInfo.jsx';
 
 // استيراد الدوال المساعدة
 import { formatDate, addDays, formatNumber, calculateTotalRevenue, analyzeFinancialPerformance } from './utils/helpers.js';
